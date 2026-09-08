@@ -26,4 +26,4 @@ USER appuser
 EXPOSE 5000
 
 # Run with Granian (interface, host, port, and entrypoint read from environment)
-CMD ["sh", "-c", "granian --interface ${GRANIAN_INTERFACE:-wsgi} --host ${GRANIAN_HOST:-0.0.0.0} --port ${GRANIAN_PORT:-5000} ${GRANIAN_TARGET:-index:app}"]
+CMD ["sh", "-c", "granian --interface ${GRANIAN_INTERFACE:-wsgi} --host ${GRANIAN_HOST:-0.0.0.0} --port 5000 ${GRANIAN_TARGET:-index:app}"]

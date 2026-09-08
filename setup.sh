@@ -46,8 +46,8 @@ log_fail()    { echo -e "${RED}[FAIL]${RESET} $*"; ((ERRORS++)); }
 print_banner() {
     echo -e "${BOLD}${CYAN}"
     echo "============================================================"
-    echo "   SMIS Mock Server - Granian & Docker Readiness Checker    "
-    echo "   App: app/unitama_mockserver_smis/index.py                "
+    echo "       Python App - Granian & Docker Readiness Checker      "
+    echo "   App: app/${APP_DIRNAME}/${ENTRY_MODULE}.py"
     echo "============================================================"
     echo -e "${RESET}"
 }
@@ -226,11 +226,11 @@ PYEOF
 check_all_python_codes() {
     echo -e "\n${BOLD}${CYAN}[2/5] Verifying Python Code Requirements for Granian...${RESET}"
 
-    # Verify primary deployment file (index.py)
+    # Verify primary deployment file
     if [ -f "${TARGET_FILE}" ]; then
-        verify_python_code "${TARGET_FILE}" "Target Deployment File (index.py)"
+        verify_python_code "${TARGET_FILE}" "Target Deployment File (${ENTRY_MODULE}.py)"
     else
-        log_fail "Target index.py not found at: ${TARGET_FILE}"
+        log_fail "Target ${ENTRY_MODULE}.py not found at: ${TARGET_FILE}"
     fi
 
     # Verify source file (mock_server.py) in addon repo if available
