@@ -1,0 +1,13 @@
+services:
+  mock-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_DIRNAME: "${APP_DIRNAME:?Error - Set APP_DIRNAME in .env to the cloned folder inside app/}"
+    container_name: smis_mock_server
+    ports:
+      - "${GRANIAN_PORT:-5000}:5000"
+    env_file:
+      - .env
+    restart: unless-stopped

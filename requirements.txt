@@ -1,0 +1,5 @@
+flask>=3.0.0
+pyjwt>=2.8.0
+python-dotenv>=1.0.0
+granian[dotenv]>=1.6.0
+
