@@ -379,8 +379,10 @@ check_env_config() {
     fi
     if [ ! -d "${host_data}" ]; then
         mkdir -p "${host_data}"
+        chmod 777 "${host_data}" 2>/dev/null || true
         log_success "Created host data directory for bind mount: ${host_data}"
     else
+        chmod 777 "${host_data}" 2>/dev/null || true
         log_success "Host data directory exists for bind mount: ${host_data}"
     fi
 

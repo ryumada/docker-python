@@ -19,8 +19,8 @@ COPY app/${APP_DIRNAME}/ ./
 # Install application dependencies if present in the cloned repository
 RUN if [ -f "requirements.txt" ]; then pip install --no-cache-dir -r requirements.txt; fi
 
-# Create data directory and non-root user for security
-RUN mkdir -p /data && useradd -m -u 10001 appuser && chown -R appuser:appuser /app /data
+# Create data directory and non-root user for security (UID 1000 standard)
+RUN mkdir -p /data && useradd -m appuser && chown -R appuser:appuser /app /data
 USER appuser
 
 VOLUME /data
