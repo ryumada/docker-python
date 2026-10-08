@@ -370,6 +370,20 @@ check_env_config() {
         fi
     fi
 
+    # Storage & Data Persistence (Bind Mount)
+    local host_data
+    host_data="$(grep -E '^HOST_DATA_DIR=' "${env_file}" 2>/dev/null | cut -d '=' -f2- | tr -d ' "\r\n' || echo './data')"
+    [ -z "${host_data}" ] && host_data="./data"
+    if [[ "${host_data}" != /* ]]; then
+        host_data="${SCRIPT_DIR}/${host_data#./}"
+    fi
+    if [ ! -d "${host_data}" ]; then
+        mkdir -p "${host_data}"
+        log_success "Created host data directory for bind mount: ${host_data}"
+    else
+        log_success "Host data directory exists for bind mount: ${host_data}"
+    fi
+
     # PYTHONUNBUFFERED
     local unbuffered
     unbuffered="$(grep -E '^PYTHONUNBUFFERED=' "${env_file}" 2>/dev/null | cut -d '=' -f2- | tr -d ' "\r\n' || echo '')"

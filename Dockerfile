@@ -19,10 +19,11 @@ COPY app/${APP_DIRNAME}/ ./
 # Install application dependencies if present in the cloned repository
 RUN if [ -f "requirements.txt" ]; then pip install --no-cache-dir -r requirements.txt; fi
 
-# Non-root user for security
-RUN useradd -m appuser && chown -R appuser:appuser /app
+# Create data directory and non-root user for security
+RUN mkdir -p /data && useradd -m -u 10001 appuser && chown -R appuser:appuser /app /data
 USER appuser
 
+VOLUME /data
 EXPOSE 5000
 
 # Run with Granian (interface, host, port, and entrypoint read from environment)
