@@ -126,10 +126,11 @@ verify_python_code() {
 
     # Run AST-based code analysis via Python
     local result
-    result="$(python3 - <<PYEOF
+    result="$(python3 - "${file_to_check}" "${ENTRY_CALLABLE}" <<'PYEOF'
 import ast, sys
 
-filepath = "${file_to_check}"
+filepath = sys.argv[1]
+expected_callable = sys.argv[2]
 try:
     with open(filepath, "r", encoding="utf-8") as f:
         source = f.read()
@@ -139,7 +140,6 @@ except Exception as e:
     sys.exit(1)
 
 # Check 1: Entrypoint callable defined at module level
-expected_callable = "${ENTRY_CALLABLE}"
 has_callable = False
 for node in tree.body:
     if isinstance(node, ast.Assign):
@@ -422,10 +422,15 @@ patch_python_file() {
     log_info "Creating backup: ${target}.bak..."
     cp "${target}" "${target}.bak"
 
-    python3 - <<PYEOF
+    python3 - "${target}" "${ENTRY_MODULE}" "${ENTRY_CALLABLE}" <<'PYEOF'
 import re
+import sys
+import ast
 
-filepath = "${target}"
+filepath = sys.argv[1]
+entry_module = sys.argv[2]
+entry_callable = sys.argv[3]
+
 with open(filepath, "r", encoding="utf-8") as f:
     content = f.read()
 
@@ -468,18 +473,17 @@ content = re.sub(old_main_pattern, new_main_block, content)
 
 # 4. Inject Granian ASGI Entrypoint for build_app/create_app factories if callable is missing
 try:
-    import ast
     tree = ast.parse(content)
     has_callable = False
     build_func_name = None
     for node in tree.body:
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "${ENTRY_CALLABLE}":
+                if isinstance(target, ast.Name) and target.id == entry_callable:
                     has_callable = True
                     break
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name == "${ENTRY_CALLABLE}":
+            if node.name == entry_callable:
                 has_callable = True
                 break
             if node.name in ("build_app", "create_app", "get_app"):
@@ -491,8 +495,8 @@ try:
 _application = None
 
 
-async def ${ENTRY_CALLABLE}(scope, receive, send):
-    \"\"\"ASGI application entrypoint for Granian / Uvicorn (e.g. ${ENTRY_MODULE}:${ENTRY_CALLABLE}).\"\"\"
+async def {entry_callable}(scope, receive, send):
+    \"\"\"ASGI application entrypoint for Granian / Uvicorn (e.g. {entry_module}:{entry_callable}).\"\"\"
     global _application
     if _application is None:
         _application = {build_func_name}()
@@ -500,8 +504,8 @@ async def ${ENTRY_CALLABLE}(scope, receive, send):
 """
         if re.search(r"\n\s*#\s*-{3,}\s*CLI", content):
             content = re.sub(r"(\n\s*#\s*-{3,}\s*CLI)", asgi_block + r"\1", content, count=1)
-        elif re.search(r"\n\s*if __name__\s*==\s*["]__main__[\"]\s*:", content):
-            content = re.sub(r"(\n\s*if __name__\s*==\s*["]__main__[\"]\s*:)", asgi_block + r"\1", content, count=1)
+        elif re.search(r"\n\s*if __name__\s*==\s*['\"]__main__['\"]\s*:", content):
+            content = re.sub(r"(\n\s*if __name__\s*==\s*['\"]__main__['\"]\s*:)", asgi_block + r"\1", content, count=1)
         else:
             content = content.rstrip() + "\n" + asgi_block
 except Exception as e:
