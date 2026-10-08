@@ -274,10 +274,14 @@ check_container_files() {
             log_success "Dockerfile is configured with default entrypoint index:app."
         fi
 
-        if grep -q "\-\-interface[[:space:]]\+wsgi" "${df_file}" || grep -q "GRANIAN_INTERFACE=wsgi" "${SCRIPT_DIR}/.env" 2>/dev/null; then
-            log_success "Granian WSGI interface is explicitly configured."
+        local configured_iface
+        configured_iface="$(grep -E '^GRANIAN_INTERFACE=' "${SCRIPT_DIR}/.env" 2>/dev/null | cut -d '=' -f2- | tr -d ' "\r\n' || echo 'wsgi')"
+        [ -z "${configured_iface}" ] && configured_iface="wsgi"
+
+        if [ "${configured_iface}" = "wsgi" ] || [ "${configured_iface}" = "asgi" ]; then
+            log_success "Granian interface (${configured_iface}) is explicitly configured."
         else
-            log_fail "Granian interface MUST be specified as WSGI for Flask! Add '--interface wsgi'."
+            log_fail "Granian interface '${configured_iface}' is invalid (must be 'wsgi' or 'asgi')."
         fi
     else
         log_fail "Dockerfile not found!"
