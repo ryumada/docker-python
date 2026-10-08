@@ -147,6 +147,10 @@ for node in tree.body:
             if isinstance(target, ast.Name) and target.id == expected_callable:
                 has_callable = True
                 break
+    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if node.name == expected_callable:
+            has_callable = True
+            break
 
 if has_callable:
     print(f"PASS:Entrypoint callable '{expected_callable}' defined at module level.")
@@ -461,6 +465,47 @@ new_main_block = """if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=False, port=port)"""
 
 content = re.sub(old_main_pattern, new_main_block, content)
+
+# 4. Inject Granian ASGI Entrypoint for build_app/create_app factories if callable is missing
+try:
+    import ast
+    tree = ast.parse(content)
+    has_callable = False
+    build_func_name = None
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "${ENTRY_CALLABLE}":
+                    has_callable = True
+                    break
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name == "${ENTRY_CALLABLE}":
+                has_callable = True
+                break
+            if node.name in ("build_app", "create_app", "get_app"):
+                build_func_name = node.name
+
+    if not has_callable and build_func_name:
+        asgi_block = f"""
+
+_application = None
+
+
+async def ${ENTRY_CALLABLE}(scope, receive, send):
+    \"\"\"ASGI application entrypoint for Granian / Uvicorn (e.g. ${ENTRY_MODULE}:${ENTRY_CALLABLE}).\"\"\"
+    global _application
+    if _application is None:
+        _application = {build_func_name}()
+    await _application(scope, receive, send)
+"""
+        if re.search(r"\n\s*#\s*-{3,}\s*CLI", content):
+            content = re.sub(r"(\n\s*#\s*-{3,}\s*CLI)", asgi_block + r"\1", content, count=1)
+        elif re.search(r"\n\s*if __name__\s*==\s*["]__main__[\"]\s*:", content):
+            content = re.sub(r"(\n\s*if __name__\s*==\s*["]__main__[\"]\s*:)", asgi_block + r"\1", content, count=1)
+        else:
+            content = content.rstrip() + "\n" + asgi_block
+except Exception as e:
+    pass
 
 with open(filepath, "w", encoding="utf-8") as f:
     f.write(content)
