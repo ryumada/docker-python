@@ -23,6 +23,7 @@ GRANIAN_TARGET="$(grep -E '^GRANIAN_TARGET=' "${SCRIPT_DIR}/.env" 2>/dev/null | 
 ENTRY_MODULE="${GRANIAN_TARGET%%:*}"
 ENTRY_CALLABLE="${GRANIAN_TARGET##*:}"
 TARGET_FILE="${SCRIPT_DIR}/app/${APP_DIRNAME}/${ENTRY_MODULE}.py"
+UPDATE_SCRIPT="${SCRIPT_DIR}/scripts/utility/update_env_file.sh"
 SOURCE_FILE="${SCRIPT_DIR}/../unitama-18ent-addons/custom_addons/tilabs_unitama_api_base/mock_server.py"
 
 # Formatting
@@ -60,7 +61,8 @@ print_help() {
     echo "  --check       (Default) Run complete verification (system, Granian code, .env, ports)"
     echo "  --check-code  Check only python code compatibility for Granian deployment"
     echo "  --fix-code    Automatically patch index.py (and mock_server.py) with Granian-ready code"
-    echo "  --create-env  Create .env from .env.example with a cryptographically secure secret"
+    echo "  --create-env  Create .env from root and app .env.example with cryptographically secure secrets
+  --update-env  Merge root .env.example with app .env.example while preserving existing values"
     echo "  --build       Run checks and build the Docker image"
     echo "  --up, --start Run checks, build and start container in background"
     echo "  --down, --stop Stop and remove running container"
@@ -346,6 +348,24 @@ check_env_config() {
         log_success "SECRET_KEY has custom secret configured."
     fi
 
+    # Check if app-specific variables are in .env
+    local app_example="${SCRIPT_DIR}/app/${APP_DIRNAME}/.env.example"
+    if [ -f "${app_example}" ] && [ -f "${env_file}" ]; then
+        local missing_vars=0
+        while IFS= read -r line || [ -n "$line" ]; do
+            if [[ "$line" =~ ^[a-zA-Z_]+[a-zA-Z0-9_]*= ]]; then
+                var_name=$(echo "$line" | cut -d'=' -f1)
+                if ! grep -q "^${var_name}=" "${env_file}"; then
+                    log_warn "App variable '${var_name}' from ${APP_DIRNAME}/.env.example is not in .env."
+                    ((missing_vars++))
+                fi
+            fi
+        done < "${app_example}"
+        if [ "$missing_vars" -gt 0 ]; then
+            log_info "Tip: Run ${BOLD}./setup.sh --update-env${RESET} to merge missing app variables into .env."
+        fi
+    fi
+
     # PYTHONUNBUFFERED
     local unbuffered
     unbuffered="$(grep -E '^PYTHONUNBUFFERED=' "${env_file}" 2>/dev/null | cut -d '=' -f2- | tr -d ' "\r\n' || echo '')"
@@ -538,30 +558,45 @@ cmd_fix_code() {
     check_all_python_codes
 }
 
-create_env_file() {
-    local env_file="${SCRIPT_DIR}/.env"
-    local env_example="${SCRIPT_DIR}/.env.example"
+update_env_file_merged() {
+    local env_merge="${SCRIPT_DIR}/.env.example.merge"
+    local base_example="${SCRIPT_DIR}/.env.example"
+    local app_example="${SCRIPT_DIR}/app/${APP_DIRNAME}/.env.example"
 
-    if [ ! -f "${env_example}" ]; then
-        log_fail ".env.example does not exist."
+    if [ ! -f "${base_example}" ]; then
+        log_fail "Base .env.example does not exist."
         return 1
     fi
 
-    log_info "Creating .env from .env.example..."
-    cp "${env_example}" "${env_file}"
+    log_info "Preparing merged template from root .env.example and app/${APP_DIRNAME}/.env.example..."
+    cat "${base_example}" > "${env_merge}"
+    echo "" >> "${env_merge}"
 
-    local secret
-    if command -v openssl >/dev/null 2>&1; then
-        secret="$(openssl rand -hex 32)"
+    if [ -n "${APP_DIRNAME}" ] && [ -d "${SCRIPT_DIR}/app/${APP_DIRNAME}" ]; then
+        if [ -f "${app_example}" ]; then
+            echo "# ==============================================================================" >> "${env_merge}"
+            echo "# App-Specific Configuration (${APP_DIRNAME})" >> "${env_merge}"
+            echo "# ==============================================================================" >> "${env_merge}"
+            cat "${app_example}" >> "${env_merge}"
+            echo "" >> "${env_merge}"
+            log_success "Merged ${APP_DIRNAME}/.env.example into template."
+        else
+            log_warn "App .env.example not found at: ${app_example}. Merging base .env.example only."
+        fi
+    fi
+
+    if [ -f "${UPDATE_SCRIPT}" ]; then
+        bash "${UPDATE_SCRIPT}" "${env_merge}"
     else
-        secret="$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || date +%s%N | sha256sum | head -c 64)"
+        log_info "Copying merged template to .env..."
+        cp "${env_merge}" "${SCRIPT_DIR}/.env"
     fi
 
-    if [ -n "${secret}" ]; then
-        sed -i "s|SECRET_KEY=change-this-to-a-secure-random-secret-key|SECRET_KEY=${secret}|g" "${env_file}"
-        log_success "Generated new cryptographically secure SECRET_KEY in .env."
-    fi
-    log_success ".env created successfully."
+    rm -f "${env_merge}"
+}
+
+create_env_file() {
+    update_env_file_merged
 }
 
 cmd_build() {
@@ -665,9 +700,9 @@ case "${ACTION}" in
     --fix-code|--patch)
         cmd_fix_code
         ;;
-    --create-env)
+    --create-env|--update-env|--merge-env)
         print_banner
-        create_env_file
+        update_env_file_merged
         ;;
     --build)
         print_banner
